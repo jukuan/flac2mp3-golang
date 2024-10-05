@@ -14,38 +14,58 @@ func isFFmpegInstalled() bool {
 	return err == nil
 }
 
-func convertFlacToMp3(filePath string, bitrate string) {
-	outputFile := strings.TrimSuffix(filePath, ".flac") + ".mp3"
-
-	// Check if the output MP3 file already exists
-	if _, err := os.Stat(outputFile); err == nil {
-		fmt.Printf("Warning: %s already exists. Skipping conversion for %s\n", outputFile, filePath)
-		return
-	}
-
-	cmd := exec.Command("ffmpeg", "-i", filePath, "-b:a", bitrate, outputFile)
+func convertToMp3(inputFile string, outputFile string, bitrate string) {
+	cmd := exec.Command("ffmpeg", "-i", inputFile, "-b:a", bitrate, outputFile)
 	err := cmd.Run()
 	if err != nil {
-		fmt.Printf("Error converting %s: %v\n", filePath, err)
+		fmt.Printf("Error converting %s: %v\n", inputFile, err)
 	}
 }
 
-func readFlacFilesAndConvert(sourceDir string, bitrate string) {
+func convertAudioFiles(sourceDir string, bitrate string, inputFormat string) {
 	filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if !info.IsDir() && strings.HasSuffix(strings.ToLower(path), ".flac") {
-			fmt.Printf("Converting %s with bitrate %s...\n", path, bitrate)
-			convertFlacToMp3(path, bitrate)
+		if !info.IsDir() && strings.HasSuffix(strings.ToLower(path), "."+inputFormat) {
+			outputFile := strings.TrimSuffix(path, "."+inputFormat) + ".mp3"
+			if _, err := os.Stat(outputFile); err == nil {
+				fmt.Printf("Warning: %s already exists. Skipping conversion for %s\n", outputFile, path)
+				return nil
+			}
+			fmt.Printf("Converting %s to MP3 with bitrate %s...\n", path, bitrate)
+			convertToMp3(path, outputFile, bitrate)
 		}
 		return nil
 	})
 }
 
+
+func removeAudioFiles(dirPath string) {
+	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && (strings.HasSuffix(strings.ToLower(path), ".flac") || strings.HasSuffix(strings.ToLower(path), ".wav")) {
+			err := os.Remove(path)
+			if err != nil {
+				fmt.Printf("Error removing %s: %v\n", path, err)
+			} else {
+				fmt.Printf("Removed %s\n", path)
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		fmt.Printf("Error walking through directory: %v\n", err)
+	}
+}
+
 func main() {
 	sourceDir := ""
 	bitrate := "192k"
+	inputFormat := "flac" // Default input format
 
 	if len(os.Args) > 1 {
 		sourceDir = os.Args[1]
@@ -53,6 +73,15 @@ func main() {
 
 	if len(os.Args) > 2 {
 		bitrate = os.Args[2]
+	}
+
+    if ("rm" == bitrate) {
+        removeAudioFiles(sourceDir)
+        return
+    }
+
+	if len(os.Args) > 3 {
+		inputFormat = os.Args[3]
 	}
 
 	if sourceDir == "" {
@@ -65,5 +94,5 @@ func main() {
 		return
 	}
 
-	readFlacFilesAndConvert(sourceDir, bitrate)
+	convertAudioFiles(sourceDir, bitrate, inputFormat)
 }
